@@ -1,0 +1,1168 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to create AWS resources related to network setup in procurement account
+
+Parameters:
+  FirewallMode:
+    Type: String
+    Description: Firewall Mode
+    AllowedValues:
+    - None
+    - Fortigate NGFW
+    Default: None
+  LifebitPlatformIamTrustedEntityArns:
+    Type: List<String>
+    Description: Lifebit Platform Iam Trusted Entities Arns (IAM User or Roles)
+    Default: arn:aws:iam::209235234270:root
+  ProcurementRoleName:
+    Type: String
+    Description: Name of the procurement IAM role
+    Default: lifebit-network-manager-role
+
+Conditions:
+  isFortigateFirewallEnabled: !Equals [!Ref FirewallMode, "Fortigate NGFW" ]
+  isFirewallDisabled: !Equals [!Ref FirewallMode, "None" ]
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Lifebit Platform Configurations
+      Parameters:
+      - LifebitPlatformIamTrustedEntityArns
+    - Label:
+        default: Firewall Configurations
+      Parameters:
+      - FirewallMode
+    - Label:
+        default: Procurement Role Configurations
+      Parameters:
+      - ProcurementRoleName
+
+    ParameterLabels:
+      LifebitPlatformIamTrustedEntityArns:
+        default: Iam Trusted Entities Arns
+      FirewallMode:
+        default: Firewall Mode
+
+Resources:
+  ProcurementRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref ProcurementRoleName
+      Description: This role helps to provision network setup on procurement account.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Ref LifebitPlatformIamTrustedEntityArns
+          Action:
+            - sts:AssumeRole
+            - sts:TagSession
+
+  BastionInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lifebit-bastion-instance-role
+      Description: This role helps to provision bastion instance on procurement account.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+              - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BastionInstanceRole
+      InstanceProfileName: !Ref BastionInstanceRole
+
+  BastionInstanceRolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      PolicyName: bastion-instance-policy
+      RoleName: !Ref BastionInstanceRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+            - ssm:UpdateInstanceInformation
+            - ssmmessages:CreateControlChannel
+            - ssmmessages:CreateDataChannel
+            - ssmmessages:OpenControlChannel
+            - ssmmessages:OpenDataChannel
+            - kms:Decrypt
+            Resource: "*"
+          - Sid: EcrGetAuthorizationToken
+            Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource: "*"
+          - Sid: EcrPullImage
+            Effect: Allow
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+            Resource:
+              - !Sub "arn:aws:ecr:*:942344369036:repository/*"
+          - Sid: CloudWatchLogsForEcs
+            Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+            Resource:
+              - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/ecs/*"
+              - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/ecs/*:*"
+
+  FortigateFirewallInstanceRole:
+    Type: AWS::IAM::Role
+    Condition: isFortigateFirewallEnabled
+    Properties:
+      RoleName: lifebit-fortigate-firewall-instance-role
+      Description: This role helps to provision fortigate firewall instance on procurement account.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+
+  FortigateFirewallInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: isFortigateFirewallEnabled
+    Properties:
+      Roles:
+        - !Ref FortigateFirewallInstanceRole
+      InstanceProfileName: !Ref FortigateFirewallInstanceRole
+
+  FortigateFirewallInstanceRolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Condition: isFortigateFirewallEnabled
+    Properties:
+      PolicyName: fortigate-firewall-instance-policy
+      RoleName: !Ref FortigateFirewallInstanceRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: FortigateFirewallEc2Permissions
+          Effect: Allow
+          Action:
+          - ec2:Describe*
+          - ec2:AssociateAddress
+          - ec2:AssignPrivateIpAddresses
+          - ec2:UnassignPrivateIpAddresses
+          - ec2:ReplaceRoute
+          Resource: "*"
+        - Sid: FortigateFirewallS3Permissions
+          Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: "*"
+
+  TransitGatewayAndRamPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-transit-gateway-ram-iam-policy"
+      Description: AWS RAM, Transit gateway and its service
+      Roles:
+      - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: TransitGatewayWildcardOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeTransitGateways
+          Resource: "*"
+        - Sid: TransitGatewayCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateTransitGateway
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway/*"
+        - Sid: TransitGatewayModify
+          Effect: Allow
+          Action:
+          - ec2:ModifyTransitGateway
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-route-table/*"
+        - Sid: TransitGatewayDelete
+          Effect: Allow
+          Action:
+          - ec2:DeleteTransitGateway
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway/*"
+        - Sid: TransitGatewayAttachmentWildcardOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeTransitGatewayVpcAttachments
+          Resource: "*"
+        - Sid: TransitGatewayAttachmentCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateTransitGatewayVpcAttachment
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-attachment/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway/*"
+        - Sid: TransitGatewayAttachmentEdit
+          Effect: Allow
+          Action:
+          - ec2:ModifyTransitGatewayVpcAttachment
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-attachment/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+        - Sid: TransitGatewayAttachmentDelete
+          Effect: Allow
+          Action:
+          - ec2:DeleteTransitGatewayVpcAttachment
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-attachment/*"
+        - Sid: TransitGatewayRouteTableWildCardOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeTransitGatewayRouteTables
+          - ec2:GetTransitGatewayRouteTableAssociations
+          - ec2:GetTransitGatewayRouteTablePropagations
+          Resource: "*"
+        - Sid: TransitGatewayRouteTableCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateTransitGatewayRouteTable
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-route-table/*"
+        - Sid: TransitGatewayRouteTableDelete
+          Effect: Allow
+          Action:
+          - ec2:DeleteTransitGatewayRouteTable
+          - ec2:SearchTransitGatewayRoutes
+          - ec2:DeleteTransitGatewayRoute
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-route-table/*"
+        - Sid: TransitGatewayRouteTableDetailsEdit
+          Effect: Allow
+          Action:
+          - ec2:AssociateTransitGatewayRouteTable
+          - ec2:DisassociateTransitGatewayRouteTable
+          - ec2:EnableTransitGatewayRouteTablePropagation
+          - ec2:DisableTransitGatewayRouteTablePropagation
+          - ec2:CreateTransitGatewayRoute
+          - ec2:ReplaceTransitGatewayRoute
+          Resource:
+          - !Sub "arn:aws:ec2:*:*:transit-gateway-attachment/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:transit-gateway-route-table/*"
+        - Sid: ResourceAccessManagerTag
+          Effect: Allow
+          Action:
+          - ram:TagResource
+          - ram:UntagResource
+          Resource: !Sub "arn:aws:ram:*:${AWS::AccountId}:resource-share/*"
+        - Sid: ResourceAccessManagerWildCardOnly
+          Effect: Allow
+          Action:
+          - ram:GetResourceShares
+          Resource: !Sub "arn:aws:ram:*:${AWS::AccountId}:resource-share/*"
+        - Sid: ResourceAccessManagerNameSpecific
+          Effect: Allow
+          Action:
+          - ram:CreateResourceShare
+          - ram:DeleteResourceShare
+          - ram:ListPrincipals
+          - ram:ListResources
+          - ram:ListResourceSharePermissions
+          - ram:GetResourceShareAssociations
+          - ram:AssociateResourceShare
+          - ram:DisassociateResourceShare
+          Resource: !Sub "arn:aws:ram:*:${AWS::AccountId}:resource-share/*"
+        - Sid: IamRoleCreationLimited
+          Effect: Allow
+          Action:
+            - iam:PutRolePolicy
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway"
+        - Sid: IamAttachDetachPolicyLimited
+          Effect: Allow
+          Action:
+            - iam:DeleteRolePolicy
+            - iam:AttachRolePolicy
+            - iam:DetachRolePolicy
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway"
+        - Sid: AllowCreateServiceLinkedRole
+          Effect: Allow
+          Action:
+          - iam:CreateServiceLinkedRole
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway"
+
+  VpcPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-procurement-vpc-policy"
+      Description: Vpc and its service related policies
+      Roles:
+      - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: Ec2Tags
+          Effect: Allow
+          Action:
+          - ec2:CreateTags
+          - ec2:DeleteTags
+          - ec2:DescribeTags
+          Resource: "*"
+        - Sid: Ec2WildCardOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeImages
+          - ec2:DescribeRegions
+          - ec2:DescribeAccountAttributes
+          - ec2:DescribeAvailabilityZones
+          - ec2:DescribeVpcs
+          - ec2:DescribeNetworkAcls
+          - ec2:DescribeSubnets
+          - ec2:DescribeRouteTables
+          - ec2:DescribeInternetGateways
+          - ec2:DescribeNatGateways
+          - ec2:DescribeNetworkInterfaces
+          - ec2:DescribeInstanceTypes
+          - ec2:DescribeInstanceCreditSpecifications
+          - ec2:DisassociateAddress
+          Resource: "*"
+        - Sid: VpcSpecific
+          Effect: Allow
+          Action:
+          - ec2:CreateVpc
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+          Condition:
+            StringEquals:
+              "aws:RequestTag/ManagedBy": "Lifebit"
+        - Sid: VpcIdSpecific
+          Effect: Allow
+          Action:
+          - ec2:DeleteVpc
+          - ec2:ModifyVpcAttribute
+          - ec2:DescribeVpcAttribute
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+          Condition:
+            StringEquals:
+              aws:ResourceTag/Lifebit-managed-resource: "true"
+              aws:ResourceTag/ManagedBy: "Lifebit"
+        - Sid: SubnetCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateSubnet
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+          Condition:
+            StringEquals:
+              "aws:RequestTag/ManagedBy": "Lifebit"
+        - Sid: SubnetCreateVpcAccess
+          Effect: Allow
+          Action:
+          - ec2:CreateSubnet
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+          Condition:
+            StringEquals:
+              "aws:ResourceTag/ManagedBy": "Lifebit"
+        - Sid: SubnetDelete
+          Effect: Allow
+          Action:
+          - ec2:DeleteSubnet
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+          Condition:
+            StringEquals:
+              aws:ResourceTag/Lifebit-managed-resource: "true"
+              aws:ResourceTag/ManagedBy: "Lifebit"
+        - Sid: NetworkAclCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateNetworkAcl
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:network-acl/*"
+        - Sid: NetworkAclEdit
+          Effect: Allow
+          Action:
+          - ec2:CreateNetworkAclEntry
+          - ec2:DeleteNetworkAcl
+          - ec2:DeleteNetworkAclEntry
+          - ec2:ReplaceNetworkAclEntry
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:network-acl/*"
+        - Sid: NetworkAclAss
+          Effect: Allow
+          Action:
+          - ec2:ReplaceNetworkAclAssociation
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:network-acl/*"
+        - Sid: InternetGatewayCreateOrDelete
+          Effect: Allow
+          Action:
+          - ec2:CreateInternetGateway
+          - ec2:DeleteInternetGateway
+          Resource:
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:internet-gateway/*"
+        - Sid: InternetGatewayEdit
+          Effect: Allow
+          Action:
+          - ec2:AttachInternetGateway
+          - ec2:DetachInternetGateway
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:internet-gateway/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+        - Sid: VpcRouteTableCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateRouteTable
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:route-table/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+        - Sid: VpcRouteTableDelete
+          Effect: Allow
+          Action:
+            - ec2:DeleteRouteTable
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:route-table/*"
+        - Sid: VpcRouteTableEdit
+          Effect: Allow
+          Action:
+          - ec2:AssociateRouteTable
+          - ec2:DisassociateRouteTable
+          - ec2:ReplaceRouteTableAssociation
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:route-table/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:internet-gateway/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+        - Sid: VpcRoutes
+          Effect: Allow
+          Action:
+          - ec2:CreateRoute
+          - ec2:DeleteRoute
+          - ec2:ReplaceRoute
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:route-table/*"
+        - Sid: SecurityGroupWildOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeSecurityGroups
+          - ec2:DescribeSecurityGroupRules
+          - ec2:GetSecurityGroupsForVpc
+          Resource: "*"
+        - Sid: SecurityGroupCreate
+          Effect: Allow
+          Action:
+          - ec2:CreateSecurityGroup
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+        - Sid: SecurityGroupDelete
+          Effect: Allow
+          Action:
+          - ec2:DeleteSecurityGroup
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+        - Sid: SecurityGroupRulesAuthorize
+          Effect: Allow
+          Action:
+          - ec2:AuthorizeSecurityGroupIngress
+          - ec2:AuthorizeSecurityGroupEgress
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group-rule/*"
+        - Sid: SecurityGroupRulesModify
+          Effect: Allow
+          Action:
+          - ec2:ModifySecurityGroupRules
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group-rule/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:prefix-list/*"
+        - Sid: SecurityGroupRulesEdit
+          Effect: Allow
+          Action:
+          - ec2:RevokeSecurityGroupIngress
+          - ec2:RevokeSecurityGroupEgress
+          - ec2:UpdateSecurityGroupRuleDescriptionsEgress
+          - ec2:UpdateSecurityGroupRuleDescriptionsIngress
+          Resource:
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+        - Sid: Ec2InstanceAttribute
+          Effect: Allow
+          Action: ec2:ModifyInstanceAttribute
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:volume/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+        - Sid: Ec2InstanceWildOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeInstances
+          - ec2:DescribeVolumes
+          - ec2:DescribeInstanceStatus
+          - ec2:DescribeAddresses
+          - ec2:RunInstances
+          Resource: "*"
+        - Sid: Ec2Modify
+          Effect: Allow
+          Action:
+          - ec2:DescribeInstanceAttribute
+          - ec2:AssociateIamInstanceProfile
+          - ec2:DisassociateIamInstanceProfile
+          - ec2:StartInstances
+          - ec2:StopInstances
+          - ec2:TerminateInstances
+          - ec2:RebootInstances
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
+        - Sid: ElasticIpWildcardOnly
+          Effect: Allow
+          Action:
+          - ec2:DescribeAddressesAttribute
+          Resource: "*"
+        - Sid: ElasticIp
+          Effect: Allow
+          Action:
+          - ec2:AllocateAddress
+          - ec2:ReleaseAddress
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:elastic-ip/*"
+
+  EcsManagementPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-ecs-management-policy"
+      Description: ECS, Application Auto Scaling and CloudWatch Logs policy for procurement role
+      Roles:
+        - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EcsClusterDescribe
+            Effect: Allow
+            Action:
+              - ecs:DescribeClusters
+            Resource: "*"
+          - Sid: EcsServiceDescribe
+            Effect: Allow
+            Action:
+              - ecs:DescribeServices
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:service/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: EcsClusterCreate
+            Effect: Allow
+            Action:
+              - ecs:CreateCluster
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:cluster/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: EcsClusterManagement
+            Effect: Allow
+            Action:
+              - ecs:DeleteCluster
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:cluster/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: EcsServiceCreate
+            Effect: Allow
+            Action:
+              - ecs:CreateService
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:service/*/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: EcsServiceManagement
+            Effect: Allow
+            Action:
+              - ecs:UpdateService
+              - ecs:DeleteService
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:service/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: EcsTaskDefinitionRead
+            Effect: Allow
+            Action:
+              - ecs:DescribeTaskDefinition
+            Resource: "*"
+          - Sid: EcsTaskDefinitionWrite
+            Effect: Allow
+            Action:
+              - ecs:RegisterTaskDefinition
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource: !Sub "arn:aws:ecs:*:${AWS::AccountId}:task-definition/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: AllowTaskDefinitionDeregister
+            Effect: Allow
+            Action:
+              - ecs:DeregisterTaskDefinition
+            Resource: "*"
+            Condition:
+              StringLike:
+                aws:userid: "*:pulumi-session-*"
+          - Sid: EcsTaskRun
+            Effect: Allow
+            Action:
+              - ecs:RunTask
+            Resource:
+              - !Sub "arn:aws:ecs:*:${AWS::AccountId}:task/*/*"
+              - !Sub "arn:aws:ecs:*:${AWS::AccountId}:task-definition/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: EcsTaskStopDescribe
+            Effect: Allow
+            Action:
+              - ecs:StopTask
+              - ecs:DescribeTasks
+            Resource:
+              - !Sub "arn:aws:ecs:*:${AWS::AccountId}:task/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: ApplicationAutoScalingRead
+            Effect: Allow
+            Action:
+              - application-autoscaling:DescribeScalableTargets
+              - application-autoscaling:DescribeScalingPolicies
+              - application-autoscaling:ListTagsForResource
+            Resource: "*"
+          - Sid: ApplicationAutoScalingCreate
+            Effect: Allow
+            Action:
+              - application-autoscaling:RegisterScalableTarget
+              - application-autoscaling:TagResource
+              - application-autoscaling:UntagResource
+            Resource: 
+              - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scalable-target/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: ApplicationAutoScalingManage
+            Effect: Allow
+            Action:
+              - application-autoscaling:DeregisterScalableTarget
+              - application-autoscaling:PutScalingPolicy
+              - application-autoscaling:DeleteScalingPolicy
+            Resource: 
+              - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scalable-target/*"
+              - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scaling-policy/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: IamCreateSLRForAppAutoScaling
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: "*"
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: "ecs.application-autoscaling.amazonaws.com"
+          - Sid: CloudWatchLogsCreate
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+            Resource:
+              - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
+              - !Sub "arn:aws:logs:*:*:log-group:/aws/ecs/*"
+          - Sid: CloudWatchLogsList
+            Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+            Resource: "*"
+          - Sid: CloudWatchLogsDelete
+            Effect: Allow
+            Action:
+              - logs:DeleteLogGroup
+              - logs:DeleteLogStream
+            Resource:
+              - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
+              - !Sub "arn:aws:logs:*:*:log-group:/ecs/*:log-stream:*"
+          - Sid: CloudWatchLogsManage
+            Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:PutRetentionPolicy
+              - logs:TagResource
+              - logs:UntagResource
+              - logs:ListTagsForResource
+            Resource:
+              - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
+              - !Sub "arn:aws:logs:*:*:log-group:/ecs/*:log-stream:*"
+          - Sid: IamPassRoleLimitedForEcs
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-bastion-instance-role"
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-bastion-task-execution-role"
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-bastion-task-role"
+
+  VpcEndpointPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: isFortigateFirewallEnabled
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-vpc-endpoint-policy"
+      Description: VPC endpoint management policy for firewall mode
+      Roles:
+        - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: VpcEndpointCreate
+          Effect: Allow
+          Action:
+            - ec2:CreateVpcEndpoint
+          Resource: 
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc-endpoint/*"
+          Condition:
+            StringEquals:
+              "aws:RequestTag/ManagedBy": "Lifebit"
+        - Sid: VpcEndpointCreateExistingResources
+          Effect: Allow
+          Action:
+            - ec2:CreateVpcEndpoint
+          Resource: 
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:route-table/*"
+          Condition:
+            StringEquals:
+              "aws:ResourceTag/ManagedBy": "Lifebit"
+        - Sid: VpcEndpointModifyDelete
+          Effect: Allow
+          Action:
+            - ec2:DeleteVpcEndpoints
+            - ec2:ModifyVpcEndpoint
+          Resource: 
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc-endpoint/*"
+          Condition:
+            StringEquals:
+              "aws:ResourceTag/ManagedBy": "Lifebit"
+        - Sid: VpcEndpointDescribeWildcard
+          Effect: Allow
+          Action:
+            - ec2:DescribeVpcEndpoints
+            - ec2:DescribeVpcEndpointServices
+            - ec2:DescribePrefixLists
+          Resource: "*"
+
+  RdsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-procurement-rds-policy"
+      Description: RDS service related policies
+      Roles:
+      - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: RdsTags
+          Effect: Allow
+          Action:
+          - rds:ListTagsForResource
+          - rds:AddTagsToResource
+          - rds:RemoveTagsFromResource
+          Resource: "*"
+        - Sid: RdsWildCardOnly
+          Effect: Allow
+          Action:
+          - rds:DescribeDBInstances
+          - rds:DescribeDBClusters
+          Resource: "*"
+        - Sid: RdsDbInstanceCreate
+          Effect: Allow
+          Action:
+          - rds:CreateDBInstance
+          Resource:
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:cluster:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:db:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:pg:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:og:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:secgrp:*"
+          Condition:
+            Bool:
+              rds:ManageMasterUserPassword: true
+        - Sid: RdsDBInstanceModify
+          Effect: Allow
+          Action:
+          - rds:ModifyDBInstance
+          Resource:
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:db:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:pg:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:og:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
+          - !Sub "arn:aws:rds:*:${AWS::AccountId}:secgrp:*"
+        - Sid: RdsDBInstanceDelete
+          Effect: Allow
+          Action:
+          - rds:DeleteDBInstance
+          Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:db:*"
+        - Sid: RdsSubnetGrp
+          Effect: Allow
+          Action:
+          - rds:DescribeDBSubnetGroups
+          - rds:CreateDBSubnetGroup
+          - rds:ModifyDBSubnetGroup
+          - rds:DeleteDBSubnetGroup
+          Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
+        - Sid: KmsTag
+          Effect: Allow
+          Action:
+          - kms:ListResourceTags
+          - kms:TagResource
+          - kms:UntagResource
+          Resource: "*"
+        - Sid: KmsWildCardOnly
+          Effect: Allow
+          Action:
+          - kms:ListAliases
+          - kms:CreateKey
+          Resource: "*"
+        - Sid: KmsSpecific
+          Effect: Allow
+          Action:
+          - kms:DescribeKey
+          - kms:GetKeyPolicy
+          - kms:ScheduleKeyDeletion
+          - kms:EnableKeyRotation
+          - kms:GetKeyRotationStatus
+          - kms:Decrypt
+          - kms:GenerateDataKey
+          - kms:CreateGrant
+          Resource: !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
+        - Sid: KmsAlias
+          Effect: Allow
+          Action:
+          - kms:CreateAlias
+          - kms:DeleteAlias
+          - kms:UpdateAlias
+          Resource:
+          - !Sub "arn:aws:kms:*:${AWS::AccountId}:alias/*"
+          - !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
+        - Sid: SecretManagerWildOnly
+          Effect: Allow
+          Action:
+          - secretsmanager:ListSecrets
+          - secretsmanager:TagResource
+          - secretsmanager:UntagResource
+          Resource: "*"
+        - Sid: SecretManagers
+          Effect: Allow
+          Action:
+          - secretsmanager:CreateSecret
+          - secretsmanager:PutSecretValue
+          - secretsmanager:DescribeSecret
+          - secretsmanager:GetSecretValue
+          - secretsmanager:DeleteSecret
+          - secretsmanager:RotateSecret
+          Resource: !Sub "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:*"
+        - Sid: AllowCreateServiceLinkedRole
+          Effect: Allow
+          Action:
+          - iam:CreateServiceLinkedRole
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+
+  NonFirewallNlbPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      PolicyName: !Sub "${ProcurementRoleName}-nlb-policy"
+      RoleName: !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ElbTags
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource: "*"
+          - Sid: ElbWildCardOnly
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeListenerAttributes
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetHealth
+            Resource: "*"
+          - Sid: NlbCreate
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateLoadBalancer
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/net/*/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: NlbDeleteOrModify
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/net/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: NlBListenerCreate
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/net/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: NlBListenerCreateWithTags  
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:listener/net/*/*/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: NlBListenerUpdate
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:ModifyListenerAttributes
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:listener/net/*/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: NlbModifyExisting
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/net/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: NlbSetSecurityGroups
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:SetSecurityGroups
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:loadbalancer/net/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: TargetGroupCreate
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateTargetGroup
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:targetgroup/*/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: TargetGroupManage
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyTargetGroup
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:targetgroup/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: TargetsCreateOrUpdate
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:*:${AWS::AccountId}:targetgroup/*/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: IamServiceLinkedRoleCreate
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing"
+          - Sid: NatCreate
+            Effect: Allow
+            Action:
+              - ec2:CreateNatGateway
+            Resource:
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:natgateway/*"
+            Condition:
+              StringEquals:
+                "aws:RequestTag/ManagedBy": "Lifebit"
+          - Sid: NatCreateUseExistingResources
+            Effect: Allow
+            Action:
+              - ec2:CreateNatGateway
+            Resource:
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:elastic-ip/*"
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/ManagedBy": "Lifebit"
+          - Sid: NatDelete
+            Effect: Allow
+            Action:
+              - ec2:DeleteNatGateway
+            Resource:
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:natgateway/*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/Lifebit-managed-resource: "true"
+                aws:ResourceTag/ManagedBy: "Lifebit"
+          - Sid: NatManage
+            Effect: Allow
+            Action:
+              - ec2:AssociateNatGatewayAddress
+              - ec2:DisassociateNatGatewayAddress
+            Resource:
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:elastic-ip/*"
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:natgateway/*"
+              - !Sub "arn:aws:ec2:*:${AWS::AccountId}:network-interface/*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/Lifebit-managed-resource: "true"
+                aws:ResourceTag/ManagedBy: "Lifebit"
+          - Sid: IamInstanceProfile
+            Effect: Allow
+            Action:
+              - iam:GetInstanceProfile
+            Resource:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/*"
+
+  FortigateFirewallPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: isFortigateFirewallEnabled
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-procurement-fortigate-firewall-policy"
+      Description: Fortigate Firewall service related policies
+      Roles:
+      - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: NetworkInterface
+          Effect: Allow
+          Action:
+          - ec2:AssociateAddress
+          - ec2:CreateNetworkInterface
+          - ec2:ModifyNetworkInterfaceAttribute
+          - ec2:DeleteNetworkInterface
+          Resource:
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:network-interface/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:elastic-ip/*"
+          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
+        - Sid: DetachNetworkInterface
+          Effect: Allow
+          Action:
+          - ec2:DetachNetworkInterface
+          Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:*/*"
+        - Sid: IamPassRoleLimited
+          Effect: Allow
+          Action:
+          - iam:PassRole
+          Resource:
+            - !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-bastion-instance-role"
+            - !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-fortigate-firewall-instance-role"
+        - Sid: IamInstanceProfile
+          Effect: Allow
+          Action:
+          - iam:GetInstanceProfile
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/*"
+
+  S3Policy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-procurement-s3-policy"
+      Description: S3 service related policies
+      Roles:
+      - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: S3Actions
+          Effect: Allow
+          Action:
+          - s3:CreateBucket
+          - s3:PutBucketPolicy
+          - s3:PutBucketPublicAccessBlock
+          - s3:DeleteBucket
+          - s3:DeleteBucketPolicy
+          - s3:GetBucketTagging
+          - s3:PutBucketTagging
+          - s3:GetBucketPolicy
+          - s3:GetBucketAcl
+          - s3:GetBucketCORS
+          - s3:GetBucketWebsite
+          - s3:GetBucketVersioning
+          - s3:GetAccelerateConfiguration
+          - s3:GetBucketRequestPayment
+          - s3:GetBucketLogging
+          - s3:GetLifecycleConfiguration
+          - s3:GetReplicationConfiguration
+          - s3:GetEncryptionConfiguration
+          - s3:GetBucketObjectLockConfiguration
+          - s3:GetBucketPublicAccessBlock
+          Resource: "*"
+        - Sid: ListObject
+          Effect: Allow
+          Action:
+          - s3:GetBucketLocation
+          - s3:ListBucket
+          - s3:ListBucketVersions
+          - s3:ListBucketMultipartUploads
+          Resource: !Sub "arn:aws:s3:::*"
+        - Sid: S3Object
+          Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:GetObjectVersion
+          - s3:GetObjectAcl
+          - s3:GetObjectVersionAcl
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:PutObjectVersionAcl
+          - s3:DeleteObject
+          - s3:DeleteObjectVersion
+          - s3:GetObjectTagging
+          - s3:ListMultipartUploadParts
+          - s3:AbortMultipartUpload
+          Resource: !Sub "arn:aws:s3:::*/*"
+
+
+Outputs:
+  LifebitProcurementRole:
+    Description: Created Procurement role.
+    Value: !GetAtt ProcurementRole.Arn
