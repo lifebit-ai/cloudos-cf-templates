@@ -1,5 +1,5 @@
 Description:
-  Creates a stack that provisions an IAM role used by the Lifebit workspace to perform all actions
+  Creates a stack that provisions an IAM role used for the Lifebit workspace to perform all actions
   related to EMR, Batch, FSx services and instance roles.
 
 Metadata:
