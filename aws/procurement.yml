@@ -668,14 +668,16 @@ Resources:
             Condition:
               StringEquals:
                 "aws:ResourceTag/ManagedBy": "Lifebit"
-          - Sid: IamCreateSLRForAppAutoScaling
+          - Sid: IamCreateSLRForEcsServices
             Effect: Allow
             Action:
               - iam:CreateServiceLinkedRole
             Resource: "*"
             Condition:
               StringEquals:
-                iam:AWSServiceName: "ecs.application-autoscaling.amazonaws.com"
+                iam:AWSServiceName:
+                  - ecs.amazonaws.com
+                  - ecs.application-autoscaling.amazonaws.com
           - Sid: CloudWatchLogsCreate
             Effect: Allow
             Action:
