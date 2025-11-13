@@ -242,6 +242,7 @@ Resources:
             Action:
               - iam:AttachRolePolicy
               - iam:DetachRolePolicy
+              - iam:UpdateAssumeRolePolicy
             Resource:
               - arn:aws:iam::*:role/cloudos-*-job-role
               - arn:aws:iam::*:role/cloudos-*-session-role

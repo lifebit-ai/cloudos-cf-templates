@@ -331,6 +331,7 @@ Resources:
             Action:
               - iam:AttachRolePolicy
               - iam:DetachRolePolicy
+              - iam:UpdateAssumeRolePolicy
             Resource:
               - arn:aws:iam::*:role/cloudos-*-job-role
               - arn:aws:iam::*:role/cloudos-*-session-role
@@ -662,6 +663,7 @@ Resources:
             Principal:
               Service:
                 - ec2.amazonaws.com
+                - ecs-tasks.amazonaws.com
             Action:
               - sts:AssumeRole
 
