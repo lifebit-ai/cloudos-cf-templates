@@ -1,50 +1,31 @@
 Description:
-  Creates a stack that provisions an IAM role or user, analyses and fsx security groups used by the Lifebit workspace
-  to perform all actions related to EMR, Batch, FSx services and instance roles.
+  Creates a stack that provisions an IAM role used by the Lifebit workspace to perform all actions
+  related to EMR, Batch, FSx services and instance roles.
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Workspace role/user"
+          default: "Workspace role"
         Parameters:
-          - ResourceType
-          - IamRoleOrUserName
-          - ExternallyManagedNetwork
+          - IamRoleName
           - TrustedAccountId
       - Label:
-          default: "Additional Roles"
+          default: "Service Roles"
         Parameters:
           - ShouldCreateBatchServiceRole
           - ShouldCreateEMRServiceRole
-      - Label:
-          default: "Additional Security Groups"
-        Parameters:
-          - VpcId
-          - ShouldCreateAnalysesSecurityGroup
-          - ShouldCreateFsxSecurityGroup
 
 Parameters:
-  ResourceType:
-    Type: String
-    Default: Role
-    Description: Would you like to link your account using an IAM Role or IAM User? We recommend selecting Role.
-    AllowedValues:
-      - User
-      - Role
-
-  IamRoleOrUserName:
+  IamRoleName:
     Type: String
     Default: lifebit-platform
-    Description: The name of the workspace role/user. We recommend using "lifebit-platform".
+    Description: The name of the workspace role. We recommend using "lifebit-platform".
 
-  ExternallyManagedNetwork:
+  TrustedAccountId:
     Type: String
-    Default: No
-    Description: Have you set up your own network for the Lifebit Platform to use?
-    AllowedValues:
-      - Yes
-      - No
+    Default: ""
+    Description: AWS account to be trusted. Leave this as-is if you use Lifebit CloudOS (cloudos.lifebit.ai).
 
   ShouldCreateBatchServiceRole:
     Type: String
@@ -62,50 +43,16 @@ Parameters:
       - Yes
       - No
 
-  TrustedAccountId:
-    Type: String
-    Default: ""
-    Description: Account to be trusted in case the role is selected. Leave this as-is if you use Lifebit CloudOS (cloudos.lifebit.ai).
-
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Default: ""
-    Description: Vpc ID to use for security groups in case we need to create any of the security groups.
-
-  ShouldCreateAnalysesSecurityGroup:
-    Type: String
-    Default: Yes
-    Description: Should the template set up an analyses security group required for the workspace? Set as true if this security has not been created previously in your account.
-    AllowedValues:
-      - Yes
-      - No
-
-  ShouldCreateFsxSecurityGroup:
-    Type: String
-    Default: Yes
-    Description: Should the template set up an fsx security group required for the workspace? Set as true if this security has not been created previously in your account.
-    AllowedValues:
-      - Yes
-      - No
-
 Conditions:
-  UseRole: !Equals [!Ref ResourceType, "Role"]
-  UseUser: !Equals [!Ref ResourceType, "User"]
-  UseExternallyManagedNetwork: !Equals [!Ref ExternallyManagedNetwork, "true"]
   UseCreateBatchServiceRole: !Equals [!Ref ShouldCreateBatchServiceRole, "true"]
   UseCreateEMRServiceRole: !Equals [!Ref ShouldCreateEMRServiceRole, "true"]
   EmptyTrustedAccountId: !Equals [!Ref TrustedAccountId, ""]
-  ShouldCreateAndAllowInstanceRoles:
-    !Equals [!Ref TrustedAccountId, "021577063369"]
-  CreateAnalysesSecurityGroup: !Equals [!Ref ShouldCreateAnalysesSecurityGroup, "true"]
-  CreateFsxSecurityGroup: !Equals [!Ref ShouldCreateFsxSecurityGroup, "true"]
 
 Resources:
   LifebitWorkspaceRole:
     Type: AWS::IAM::Role
-    Condition: UseRole
     Properties:
-      RoleName: !Ref IamRoleOrUserName
+      RoleName: !Ref IamRoleName
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -160,8 +107,7 @@ Resources:
   LifebitWorkspacePolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName:
-        !Join ["-", [!Ref IamRoleOrUserName, "LifebitWorkspacePolicy"]]
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy"]]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -398,15 +344,12 @@ Resources:
             Effect: Allow
             Resource: "arn:aws:iam::*:role/vpc-publish-flow-logs"
       Roles:
-        - !If [UseRole, !Ref LifebitWorkspaceRole, !Ref AWS::NoValue]
-      Users:
-        - !If [UseUser, !Ref LifebitWorkspaceUser, !Ref AWS::NoValue]
+        - !Ref LifebitWorkspaceRole
 
   LifebitWorkspacePolicy2:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName:
-        !Join ["-", [!Ref IamRoleOrUserName, "LifebitWorkspacePolicy2"]]
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy2"]]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -501,71 +444,34 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - iam:PassRole
-              - sts:assumeRole
-            Resource:
-              - !GetAtt [LifebitWorkspaceRole, Arn]
+              - s3:AbortMultipartUpload
+              - s3:CreateBucket
+              - s3:DeleteBucket
+              - s3:DeleteBucketPolicy
+              - s3:DeleteObject
+              - s3:GetBucketCors
+              - s3:GetBucketLocation
+              - s3:GetBucketPolicy
+              - s3:GetBucketPolicyStatus
+              - s3:GetBucketTagging
+              - s3:GetBucketVersioning
+              - s3:GetObject
+              - s3:GetObjectAcl
+              - s3:ListBucket
+              - s3:ListMultipartUploadParts
+              - s3:ListBucketVersions
+              - s3:PutBucketCors
+              - s3:GetLifecycleConfiguration
+              - s3:PutBucketPolicy
+              - s3:PutBucketPublicAccessBlock
+              - s3:PutBucketTagging
+              - s3:PutBucketVersioning
+              - s3:PutObject
+              - s3:PutLifecycleConfiguration
+              - s3:PutEncryptionConfiguration
+            Resource: "*"
       Roles:
         - !Ref LifebitWorkspaceRole
-
-  LifebitExternalNetworkPolicy:
-    Type: AWS::IAM::ManagedPolicy
-    Condition: UseExternallyManagedNetwork
-    Properties:
-      ManagedPolicyName: !Sub 'lifebit-external-network-policy-${IamRoleOrUserName}'
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Action:
-              - ec2:AllocateAddress
-              - ec2:CreateInternetGateway
-              - ec2:AttachInternetGateway
-              - ec2:CreateNatGateway
-              - ec2:DescribeNatGateways 
-              - ec2:CreateVpc
-              - ec2:ModifyVpcAttribute
-              - ec2:DescribeRouteTables
-              - ec2:CreateRouteTable
-              - ec2:CreateRoute
-              - ec2:AssociateRouteTable
-              - ec2:CreateSubnet
-              - ec2:ModifySubnetAttribute
-              - ec2:CreateSecurityGroup
-              - ec2:CreateFlowLogs
-              - ec2:DescribeFlowLogs
-              - ec2:DeleteVpc
-              - ec2:DeleteSubnet
-              - ec2:DeleteInternetGateway
-              - ec2:DetachInternetGateway
-              - ec2:DeleteNatGateway
-              - ec2:DeleteSecurityGroup
-            Effect: Deny
-            Resource: "*"
-          - Action:
-              - iam:PassRole
-              - iam:AttachRolePolicy
-            Effect: Deny
-            Resource: "arn:aws:iam::*:role/vpc-publish-flow-logs"
-      Roles:
-        - !If [UseRole, !Ref LifebitWorkspaceRole, !Ref AWS::NoValue]
-      Users:
-        - !If [UseUser, !Ref LifebitWorkspaceUser, !Ref AWS::NoValue]
-
-  LifebitBatchServiceRole:
-    Type: AWS::IAM::Role
-    Condition: UseCreateBatchServiceRole
-    Properties:
-      RoleName: AWSBatchServiceRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - batch.amazonaws.com
-            Action:
-              - sts:AssumeRole
 
   LifebitEMRServiceRole:
     Type: AWS::IAM::Role
@@ -583,17 +489,19 @@ Resources:
             Action:
               - sts:AssumeRole
 
-  LifebitEMRInstancesRole:
+  LifebitBatchServiceRole:
     Type: AWS::IAM::Role
-    Condition: ShouldCreateAndAllowInstanceRoles
+    Condition: UseCreateBatchServiceRole
     Properties:
-      RoleName: lifebit-cloudos-emr-instance-role
+      RoleName: AWSBatchServiceRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
             Principal:
               Service:
-                - ec2.amazonaws.com
+                - batch.amazonaws.com
             Action:
               - sts:AssumeRole
 
@@ -766,7 +674,7 @@ Resources:
       GroupDescription: Security group used by Lifebit for analyses.
       VpcId: !Ref VpcId
       SecurityGroupEgress:
-        - IpProtocol: '-1'
+        - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
 
   FsxSecurityGroup:
@@ -777,39 +685,10 @@ Resources:
       GroupDescription: Security group used by Lifebit for fsx file systems.
       VpcId: !Ref VpcId
       SecurityGroupEgress:
-        - IpProtocol: '-1'
+        - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
 
 Outputs:
   RoleArn:
-    Condition: UseRole
     Description: The ARN of the IAM role
     Value: !GetAtt [LifebitWorkspaceRole, Arn]
-  UserArn:
-    Condition: UseUser
-    Description: The ARN of the IAM user
-    Value: !GetAtt [LifebitWorkspaceUser, Arn]
-  UserKey:
-    Condition: UseUser
-    Description: The AWS Key of the IAM user
-    Value: !Ref LifebitWorkspaceUserKeys
-  UserSecret:
-    Condition: UseUser
-    Description: The AWS secret of the IAM user can be found in the SSM.
-    Value: !Ref LifebitWorkspaceUserSecret
-  AnalysesSecurityGroupId:
-    Condition: CreateAnalysesSecurityGroup
-    Description: The ID of Analyses security group.
-    Value: !GetAtt AnalysesSecurityGroup.GroupId
-  AnalysesSecurityGroupVpcId:
-    Condition: CreateAnalysesSecurityGroup
-    Description: The VPC ID associated with analyses security group.
-    Value: !GetAtt AnalysesSecurityGroup.VpcId
-  FsxSecurityGroupId:
-    Condition: CreateFsxSecurityGroup
-    Description: The ID of the Fsx security group.
-    Value: !GetAtt FsxSecurityGroup.GroupId
-  FsxSecurityGroupVpcId:
-    Condition: CreateFsxSecurityGroup
-    Description: The VPC ID associated with fsx security group.
-    Value: !GetAtt FsxSecurityGroup.VpcId

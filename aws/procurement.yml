@@ -294,7 +294,6 @@ Resources:
         - Sid: IamAttachDetachPolicyLimited
           Effect: Allow
           Action:
-            - iam:DeleteRolePolicy
             - iam:AttachRolePolicy
             - iam:DetachRolePolicy
           Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/transitgateway.amazonaws.com/AWSServiceRoleForVPCTransitGateway"
@@ -325,8 +324,6 @@ Resources:
           Effect: Allow
           Action:
           - ec2:DescribeImages
-          - ec2:DescribeRegions
-          - ec2:DescribeAccountAttributes
           - ec2:DescribeAvailabilityZones
           - ec2:DescribeVpcs
           - ec2:DescribeNetworkAcls
@@ -353,6 +350,7 @@ Resources:
           - ec2:DeleteVpc
           - ec2:ModifyVpcAttribute
           - ec2:DescribeVpcAttribute
+          - ec2:DescribeInstanceCreditSpecifications
           Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
           Condition:
             StringEquals:
@@ -477,14 +475,6 @@ Resources:
           Resource:
           - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
           - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group-rule/*"
-        - Sid: SecurityGroupRulesModify
-          Effect: Allow
-          Action:
-          - ec2:ModifySecurityGroupRules
-          Resource:
-          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
-          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group-rule/*"
-          - !Sub "arn:aws:ec2:*:${AWS::AccountId}:prefix-list/*"
         - Sid: SecurityGroupRulesEdit
           Effect: Allow
           Action:
@@ -506,8 +496,8 @@ Resources:
           Action:
           - ec2:DescribeInstances
           - ec2:DescribeVolumes
-          - ec2:DescribeInstanceStatus
           - ec2:DescribeAddresses
+          - ec2:DescribeInstanceStatus
           - ec2:RunInstances
           Resource: "*"
         - Sid: Ec2Modify
@@ -830,13 +820,6 @@ Resources:
           - rds:ModifyDBSubnetGroup
           - rds:DeleteDBSubnetGroup
           Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
-        - Sid: KmsTag
-          Effect: Allow
-          Action:
-          - kms:ListResourceTags
-          - kms:TagResource
-          - kms:UntagResource
-          Resource: "*"
         - Sid: KmsWildCardOnly
           Effect: Allow
           Action:
@@ -847,23 +830,7 @@ Resources:
           Effect: Allow
           Action:
           - kms:DescribeKey
-          - kms:GetKeyPolicy
-          - kms:ScheduleKeyDeletion
-          - kms:EnableKeyRotation
-          - kms:GetKeyRotationStatus
-          - kms:Decrypt
-          - kms:GenerateDataKey
-          - kms:CreateGrant
           Resource: !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
-        - Sid: KmsAlias
-          Effect: Allow
-          Action:
-          - kms:CreateAlias
-          - kms:DeleteAlias
-          - kms:UpdateAlias
-          Resource:
-          - !Sub "arn:aws:kms:*:${AWS::AccountId}:alias/*"
-          - !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
         - Sid: SecretManagerWildOnly
           Effect: Allow
           Action:
@@ -1144,22 +1111,15 @@ Resources:
           - s3:GetBucketLocation
           - s3:ListBucket
           - s3:ListBucketVersions
-          - s3:ListBucketMultipartUploads
           Resource: !Sub "arn:aws:s3:::*"
         - Sid: S3Object
           Effect: Allow
           Action:
           - s3:GetObject
-          - s3:GetObjectVersion
-          - s3:GetObjectAcl
-          - s3:GetObjectVersionAcl
           - s3:PutObject
-          - s3:PutObjectAcl
-          - s3:PutObjectVersionAcl
+          - s3:GetObjectTagging
           - s3:DeleteObject
           - s3:DeleteObjectVersion
-          - s3:GetObjectTagging
-          - s3:ListMultipartUploadParts
           - s3:AbortMultipartUpload
           Resource: !Sub "arn:aws:s3:::*/*"
 
