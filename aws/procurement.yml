@@ -83,6 +83,40 @@ Resources:
         - !Ref BastionInstanceRole
       InstanceProfileName: !Ref BastionInstanceRole
 
+  FlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lifebit-flow-logs-role
+      Description: This role is used by VPC Flow Logs to publish logs to CloudWatch.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: vpc-flow-logs.amazonaws.com
+          Action:
+          - sts:AssumeRole
+
+  FlowLogsRolePolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      PolicyName: flow-logs-cloudwatch-policy
+      RoleName: !Ref FlowLogsRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: FlowLogsCloudWatchPermissions
+            Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogGroups
+            - logs:DescribeLogStreams
+            Resource:
+            - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/cloudos/networking-vpc/flowlogs"
+            - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/cloudos/networking-vpc/flowlogs:*"
+
   BastionInstanceRolePolicy:
     Type: AWS::IAM::RolePolicy
     Properties:
@@ -522,6 +556,27 @@ Resources:
           - ec2:AllocateAddress
           - ec2:ReleaseAddress
           Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:elastic-ip/*"
+        - Sid: VpcFlowLogsRead
+          Effect: Allow
+          Action:
+          - ec2:DescribeFlowLogs
+          Resource: "*"
+        - Sid: VpcFlowLogsManagement
+          Effect: Allow
+          Action:
+          - ec2:CreateFlowLogs
+          - ec2:DeleteFlowLogs
+          Resource:
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
+            - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc-flow-log/*"
+        - Sid: IamPassRoleForFlowLogs
+          Effect: Allow
+          Action:
+          - iam:PassRole
+          Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/lifebit-flow-logs-role"
+          Condition:
+            StringEquals:
+              iam:PassedToService: vpc-flow-logs.amazonaws.com
 
   EcsManagementPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -675,6 +730,8 @@ Resources:
             Resource:
               - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
               - !Sub "arn:aws:logs:*:*:log-group:/aws/ecs/*"
+              - !Sub "arn:aws:logs:*:*:log-group:/cloudos/networking-vpc/flowlogs*"
+              - !Sub "arn:aws:logs:*:*:log-group:/aws/rds/*"
           - Sid: CloudWatchLogsList
             Effect: Allow
             Action:
@@ -688,6 +745,8 @@ Resources:
             Resource:
               - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
               - !Sub "arn:aws:logs:*:*:log-group:/ecs/*:log-stream:*"
+              - !Sub "arn:aws:logs:*:*:log-group:/cloudos/networking-vpc/flowlogs*"
+              - !Sub "arn:aws:logs:*:*:log-group:/aws/rds/*"
           - Sid: CloudWatchLogsManage
             Effect: Allow
             Action:
@@ -701,6 +760,8 @@ Resources:
             Resource:
               - !Sub "arn:aws:logs:*:*:log-group:/ecs/*"
               - !Sub "arn:aws:logs:*:*:log-group:/ecs/*:log-stream:*"
+              - !Sub "arn:aws:logs:*:*:log-group:/cloudos/networking-vpc/flowlogs*"
+              - !Sub "arn:aws:logs:*:*:log-group:/aws/rds/*"
           - Sid: IamPassRoleLimitedForEcs
             Effect: Allow
             Action:
@@ -820,6 +881,19 @@ Resources:
           - rds:ModifyDBSubnetGroup
           - rds:DeleteDBSubnetGroup
           Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
+        - Sid: RdsParameterGroupDescribe
+          Effect: Allow
+          Action:
+          - rds:DescribeDBParameterGroups
+          - rds:DescribeDBParameters
+          Resource: "*"
+        - Sid: RdsParameterGroupManage
+          Effect: Allow
+          Action:
+          - rds:CreateDBParameterGroup
+          - rds:ModifyDBParameterGroup
+          - rds:DeleteDBParameterGroup
+          Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:pg:lifebit-cloudosdb-custom-pg"
         - Sid: KmsWildCardOnly
           Effect: Allow
           Action:
