@@ -425,6 +425,50 @@ Resources:
               - s3:PutLifecycleConfiguration
               - s3:PutEncryptionConfiguration
             Resource: "*"
+          - Sid: BedrockModelInvocation
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource:
+              - arn:aws:bedrock:*::foundation-model/amazon*
+              - arn:aws:bedrock:*:*:application-inference-profile/*
+          - Sid: BedrockModelApplicationInference
+            Effect: Allow
+            Action:
+              - bedrock:CreateInferenceProfile
+              - bedrock:DeleteInferenceProfile
+              - bedrock:TagResource
+              - bedrock:GetFoundationModel
+              - bedrock:GetInferenceProfile
+            Resource: "*"
+          - Sid: DynamoDBTableManagementForWorkspace
+            Effect: Allow
+            Action:
+              - dynamodb:DeleteTable
+            Resource: "arn:aws:dynamodb:*:*:table/CloudOS-agent-sessions-*"
+          - Sid: DynamoDBTableManagementForWorkspace2
+            Effect: Allow
+            Action:
+              - dynamodb:CreateTable
+              - dynamodb:DescribeTable
+              - dynamodb:TagResource
+            Resource: "*"
+          - Sid: DynamoDBDataOperationsForWorkspace
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+            Resource: "arn:aws:dynamodb:*:*:table/CloudOS-agent-sessions-*"
+          - Sid: ListTablesForVerification
+            Effect: Allow
+            Action:
+              - dynamodb:ListTables
+            Resource: "*"
       Roles:
         - !If [UseRole, !Ref LifebitWorkspaceRole, !Ref AWS::NoValue]
       Users:
