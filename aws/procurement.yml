@@ -358,6 +358,7 @@ Resources:
           Effect: Allow
           Action:
           - ec2:DescribeImages
+          - ec2:DescribeAccountAttributes
           - ec2:DescribeAvailabilityZones
           - ec2:DescribeVpcs
           - ec2:DescribeNetworkAcls
@@ -1191,6 +1192,7 @@ Resources:
           Action:
           - s3:GetObject
           - s3:PutObject
+          - s3:PutObjectAcl
           - s3:GetObjectTagging
           - s3:DeleteObject
           - s3:DeleteObjectVersion
