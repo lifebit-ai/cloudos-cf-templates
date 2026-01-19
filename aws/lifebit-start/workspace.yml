@@ -1,0 +1,457 @@
+Description:
+  Creates a stack that provisions an IAM role used for the Lifebit workspace to perform all actions
+  related to EMR, Batch, FSx services and instance roles.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Workspace role"
+        Parameters:
+          - IamRoleName
+          - TrustedAccountId
+      - Label:
+          default: "Service Roles"
+        Parameters:
+          - ShouldCreateBatchServiceRole
+          - ShouldCreateEMRServiceRole
+
+Parameters:
+  IamRoleName:
+    Type: String
+    Default: lifebit-platform
+    Description: The name of the workspace role. We recommend using "lifebit-platform".
+
+  TrustedAccountId:
+    Type: String
+    Default: ""
+    Description: AWS account to be trusted. Leave this as-is if you use Lifebit CloudOS (cloudos.lifebit.ai).
+
+  ShouldCreateBatchServiceRole:
+    Type: String
+    Default: Yes
+    Description: Should the template set up an ancillary Batch role required for the workspace? Set as true if this role has not been created previously in your account.
+    AllowedValues:
+      - Yes
+      - No
+
+  ShouldCreateEMRServiceRole:
+    Type: String
+    Default: Yes
+    Description: Should the template set up an ancillary EMR role required for the workspace? Set as true if this role has not been created previously in your account.
+    AllowedValues:
+      - Yes
+      - No
+
+Conditions:
+  UseCreateBatchServiceRole: !Equals [!Ref ShouldCreateBatchServiceRole, "true"]
+  UseCreateEMRServiceRole: !Equals [!Ref ShouldCreateEMRServiceRole, "true"]
+  EmptyTrustedAccountId: !Equals [!Ref TrustedAccountId, ""]
+
+Resources:
+  LifebitWorkspaceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref IamRoleName
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub
+                - arn:aws:iam::${TrustedAccountIdToUse}:root
+                - TrustedAccountIdToUse:
+                    !If [
+                      EmptyTrustedAccountId,
+                      "209235234270",
+                      !Ref TrustedAccountId,
+                    ]
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+
+  LifebitWorkspacePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy"]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - ec2:DescribeAvailabilityZones
+              - ec2:RunInstances
+              - ec2:DescribeInstanceTypeOfferings
+              - ec2:TerminateInstances
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceStatus
+              - ec2:CreateLaunchTemplate
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DeleteLaunchTemplate
+              - ec2:DeleteLaunchTemplateVersions
+              - ec2:DescribeLaunchTemplates
+              - ec2:CreateSnapshot
+              - ec2:RegisterImage
+              - ec2:DescribeImages
+              - ec2:DescribeSnapshots
+              - ec2:DeleteSnapshot
+              - ec2:DeregisterImage
+              - ec2:RequestSpotFleet
+              - ec2:DescribeSpotFleetInstances
+              - ec2:CancelSpotFleetRequests
+              - ec2:CreateTags
+              - ec2:DescribeVolumes
+              - ec2:DescribeSecurityGroups
+              - ec2:CreateInternetGateway
+              - ec2:AttachInternetGateway
+              - ec2:DescribeInternetGateways
+              - ec2:CreateNatGateway
+              - ec2:DescribeNatGateways
+              - ec2:CreateVpc
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcAttribute
+              - ec2:ModifyVpcAttribute
+              - ec2:DescribeRouteTables
+              - ec2:CreateRouteTable
+              - ec2:CreateRoute
+              - ec2:AssociateRouteTable
+              - ec2:CreateSubnet
+              - ec2:ModifySubnetAttribute
+              - ec2:DescribeSubnets
+              - ec2:DescribeRegions
+              - ec2:DescribeSpotPriceHistory
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:DescribeInstanceAttribute
+              - ec2:CreateSecurityGroup
+              - ec2:CreateFlowLogs
+              - ec2:DescribeFlowLogs
+              - ec2:DeleteVpc
+              - ec2:DeleteSubnet
+              - ec2:DeleteInternetGateway
+              - ec2:DetachInternetGateway
+              - ec2:DeleteNatGateway
+              - ec2:DeleteSecurityGroup
+            Effect: Allow
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - elasticmapreduce:ListInstances
+              - elasticmapreduce:DescribeCluster
+              - elasticmapreduce:RunJobFlow
+              - elasticmapreduce:TerminateJobFlows
+              - elasticmapreduce:GetBlockPublicAccessConfiguration
+              - elasticmapreduce:PutBlockPublicAccessConfiguration
+              - elasticmapreduce:CreateSecurityConfiguration
+              - elasticmapreduce:DescribeSecurityConfiguration
+              - elasticmapreduce:AddTags
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - s3:PutBucketPolicy
+            Resource:
+              - arn:aws:s3:::lifebit-user-data-*
+          - Sid: ExplicitAllowCreateServiceLinkedRole
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+              - iam:AttachRolePolicy
+              - iam:PutRolePolicy
+            Resource: arn:aws:iam::*:role/aws-service-role/*
+          - Sid: AllowDescribeEcsContainerInstances
+            Effect: Allow
+            Action:
+              - ecs:DescribeContainerInstances
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:GetRepositoryPolicy
+              - ecr:DescribeRepositories
+              - ecr:DescribeImages
+              - ecr:BatchGetImage
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - fsx:CreateFileSystem
+              - fsx:DescribeFileSystems
+              - fsx:DeleteFileSystem
+              - fsx:CreateDataRepositoryTask
+              - fsx:TagResource
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - logs:CreateExportTask
+              - logs:DescribeExportTasks
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - batch:DescribeComputeEnvironments
+              - batch:CreateComputeEnvironment
+              - batch:UpdateComputeEnvironment
+              - batch:DeleteComputeEnvironment
+              - batch:DescribeJobQueues
+              - batch:CancelJob
+              - batch:ListJobs
+              - batch:TerminateJob
+              - batch:DescribeJobs
+              - batch:CreateJobQueue
+              - batch:UpdateJobQueue
+              - batch:DeleteJobQueue
+              - batch:TagResource
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:CreatePolicy
+              - iam:GetRole
+              - iam:CreateRole
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRolePolicy
+              - iam:GetInstanceProfile
+              - iam:CreateInstanceProfile
+              - iam:CreateServiceLinkedRole
+              - iam:ListRolePolicies
+              - iam:ListAttachedRolePolicies
+              - iam:AddRoleToInstanceProfile
+            Resource: "*"
+          - Sid: AllowCloudOSToGetDeleteDataAccessPolicies
+            Effect: Allow
+            Action:
+              - iam:DeletePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicyVersion
+            Resource: arn:aws:iam::*:policy/lifebit-policy-*
+          - Sid: AllowCloudOSToAttachDetachPoliciesForManagedRoles
+            Effect: Allow
+            Action:
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:UpdateAssumeRolePolicy
+            Resource:
+              - arn:aws:iam::*:role/cloudos-*-job-role
+              - arn:aws:iam::*:role/cloudos-*-session-role
+              - arn:aws:iam::*:role/batch-*-instance-role
+              - arn:aws:iam::*:role/cloudos-*-batch-instance-role
+              - arn:aws:iam::*:role/emr-*-instance-role
+              - arn:aws:iam::*:role/cloudos-*-emr-instance-role
+              - arn:aws:iam::*:role/ecsInstanceRole
+              - arn:aws:iam::*:role/AWSBatchServiceRole
+              - arn:aws:iam::*:role/lifebit-cloudos-emr-service-role
+              - arn:aws:iam::*:role/lifebit-cloudos-emr-instance-role
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+              - sts:AssumeRole
+            Resource:
+              - arn:aws:iam::*:role/cloudos-*-job-role
+              - arn:aws:iam::*:role/cloudos-*-session-role
+              - arn:aws:iam::*:role/batch-*-instance-role
+              - arn:aws:iam::*:role/cloudos-*-batch-instance-role
+              - arn:aws:iam::*:role/emr-*-instance-role
+              - arn:aws:iam::*:role/cloudos-*-emr-instance-role
+              - arn:aws:iam::*:role/ecsInstanceRole
+              - arn:aws:iam::*:role/AWSBatchServiceRole
+              - arn:aws:iam::*:role/lifebit-cloudos-emr-service-role
+              - arn:aws:iam::*:role/lifebit-cloudos-emr-instance-role
+              - arn:aws:iam::*:role/aws-service-role/spotfleet.amazonaws.com/AWSServiceRoleForEC2SpotFleet
+          - Effect: Allow
+            Action:
+              - sts:GetCallerIdentity
+              - sts:GetSessionToken
+              - sts:GetFederationToken
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ssm:PutParameter
+              - ssm:GetParameter
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - servicequotas:ListServiceQuotas
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - pricing:GetProducts
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - kms:CreateGrant
+              - kms:RevokeGrant
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+          - Action:
+              - ce:GetCostAndUsage
+              - ce:GetTags
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - iam:PassRole
+              - iam:AttachRolePolicy
+            Effect: Allow
+            Resource: "arn:aws:iam::*:role/vpc-publish-flow-logs"
+      Roles:
+        - !Ref LifebitWorkspaceRole
+
+  LifebitWorkspacePolicy2:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy2"]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeTransitGateways
+              - ec2:DescribeTransitGatewayVpcAttachments
+              - ec2:CreateTransitGatewayVpcAttachment
+              - ec2:ModifyTransitGatewayVpcAttachment
+              - ec2:DeleteTransitGatewayVpcAttachment
+              - ec2:GetTransitGatewayRouteTablePropagations
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcEndpointServices
+              - ec2:DescribePrefixLists
+              - ec2:CreateVpcEndpoint
+              - ec2:ModifyVpcEndpoint
+              - ec2:DeleteVpcEndpoints
+              - ram:GetResourceShares
+              - ram:ListResources
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteTags
+              - ec2:DescribeTags
+              - ec2:DescribeSecurityGroupRules
+              - ec2:DescribeNetworkAcls
+              - ec2:CreateNetworkAcl
+              - ec2:CreateNetworkAclEntry
+              - ec2:DeleteNetworkAcl
+              - ec2:DeleteNetworkAclEntry
+              - ec2:ReplaceNetworkAclEntry
+              - ec2:ReplaceNetworkAclAssociation
+              - ec2:DeleteRouteTable
+              - ec2:DisassociateRouteTable
+              - ec2:ReplaceRouteTableAssociation
+              - ec2:DeleteRoute
+              - ec2:ReplaceRoute
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:ModifySecurityGroupRules
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:UpdateSecurityGroupRuleDescriptionsEgress
+              - ec2:UpdateSecurityGroupRuleDescriptionsIngress
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - s3:AbortMultipartUpload
+              - s3:CreateBucket
+              - s3:DeleteBucket
+              - s3:DeleteObject
+              - s3:GetBucketCors
+              - s3:GetBucketLocation
+              - s3:GetBucketPolicy
+              - s3:GetBucketPolicyStatus
+              - s3:GetBucketTagging
+              - s3:GetBucketVersioning
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:ListMultipartUploadParts
+              - s3:ListBucketVersions
+              - s3:PutBucketCors
+              - s3:GetLifecycleConfiguration
+              - s3:PutBucketPolicy
+              - s3:PutBucketTagging
+              - s3:PutBucketVersioning
+              - s3:PutObject
+              - s3:PutLifecycleConfiguration
+              - s3:PutEncryptionConfiguration
+            Resource: "*"
+          - Sid: BedrockModelInvocation
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource:
+              - arn:aws:bedrock:*::foundation-model/amazon*
+              - arn:aws:bedrock:*:*:application-inference-profile/*
+          - Sid: BedrockModelApplicationInference
+            Effect: Allow
+            Action:
+              - bedrock:CreateInferenceProfile
+              - bedrock:DeleteInferenceProfile
+              - bedrock:TagResource
+              - bedrock:GetFoundationModel
+              - bedrock:GetInferenceProfile
+            Resource: "*"
+          - Sid: DynamoDBTableManagementForWorkspace
+            Effect: Allow
+            Action:
+              - dynamodb:DeleteTable
+            Resource: "arn:aws:dynamodb:*:*:table/CloudOS-agent-sessions-*"
+          - Sid: DynamoDBTableManagementForWorkspace2
+            Effect: Allow
+            Action:
+              - dynamodb:CreateTable
+              - dynamodb:DescribeTable
+              - dynamodb:TagResource
+            Resource: "*"
+          - Sid: DynamoDBDataOperationsForWorkspace
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+            Resource: "arn:aws:dynamodb:*:*:table/CloudOS-agent-sessions-*"
+          - Sid: ListTablesForVerification
+            Effect: Allow
+            Action:
+              - dynamodb:ListTables
+            Resource: "*"
+      Roles:
+        - !Ref LifebitWorkspaceRole
+
+  LifebitEMRServiceRole:
+    Type: AWS::IAM::Role
+    Condition: UseCreateEMRServiceRole
+    Properties:
+      RoleName: lifebit-cloudos-emr-service-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - elasticmapreduce.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  LifebitBatchServiceRole:
+    Type: AWS::IAM::Role
+    Condition: UseCreateBatchServiceRole
+    Properties:
+      RoleName: AWSBatchServiceRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - batch.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+Outputs:
+  RoleArn:
+    Description: The ARN of the IAM role
+    Value: !GetAtt [LifebitWorkspaceRole, Arn]
