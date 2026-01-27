@@ -366,6 +366,8 @@ Resources:
               - s3:PutObject
               - s3:PutLifecycleConfiguration
               - s3:PutEncryptionConfiguration
+              - s3:PutBucketLogging
+              - s3:GetBucketLogging
             Resource: "*"
           - Sid: BedrockModelInvocation
             Effect: Allow
