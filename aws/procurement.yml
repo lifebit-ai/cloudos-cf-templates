@@ -125,15 +125,6 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Effect: Allow
-            Action:
-            - ssm:UpdateInstanceInformation
-            - ssmmessages:CreateControlChannel
-            - ssmmessages:CreateDataChannel
-            - ssmmessages:OpenControlChannel
-            - ssmmessages:OpenDataChannel
-            - kms:Decrypt
-            Resource: "*"
           - Sid: EcrGetAuthorizationToken
             Effect: Allow
             Action:
