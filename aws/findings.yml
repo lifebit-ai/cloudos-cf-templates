@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to create AWS role to fetch security hub findings for system health observability dashboard
+
+Parameters:
+  LifebitPlatformIamTrustedEntityArns:
+    Type: List<String>
+    Description: Lifebit Platform Iam Trusted Entities Arns (IAM User or Roles)
+    Default: arn:aws:iam::209235234270:root
+  FindingsRoleName:
+    Type: String
+    Description: Name of the IAM role to fetch security hub findings
+    Default: lifebit-system-health-observability-findings-role
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Lifebit Platform Configurations
+        Parameters:
+          - LifebitPlatformIamTrustedEntityArns
+      - Label:
+          default: Findings Role Configurations
+        Parameters:
+          - FindingsRoleName
+    ParameterLabels:
+      LifebitPlatformIamTrustedEntityArns:
+        default: Iam Trusted Entities Arns
+
+Resources:
+  LifebitSystemHealthObservabilityFindingsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref FindingsRoleName
+      Description: This role helps to fetch security hub findings for system health observability dashboard.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref LifebitPlatformIamTrustedEntityArns
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+
+  LifebitSystemHealthObservabilityFindingsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${FindingsRoleName}-policy'
+      Description: Security Hub findings related policies
+      Roles:
+        - !Ref LifebitSystemHealthObservabilityFindingsRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: RetrieveFindings
+            Effect: Allow
+            Action:
+              - securityhub:GetFindings
+            Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: The ARN of the IAM role
+    Value: !GetAtt [LifebitSystemHealthObservabilityFindingsRole, Arn]
