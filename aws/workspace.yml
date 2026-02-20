@@ -233,6 +233,15 @@ Resources:
               - arn:aws:iam::*:role/AWSBatchServiceRole
               - arn:aws:iam::*:role/lifebit-cloudos-emr-service-role
               - arn:aws:iam::*:role/lifebit-cloudos-emr-instance-role
+          - Sid: AllowLambdaFunctionManagementForWorkspace
+            Effect: Allow
+            Action:
+              - lambda:GetFunction
+              - lambda:CreateFunction
+              - lambda:TagResource
+              - lambda:UpdateFunctionConfiguration
+              - lambda:UpdateFunctionCode
+            Resource: "*"
           - Effect: Allow
             Action:
               - iam:PassRole
@@ -249,6 +258,7 @@ Resources:
               - arn:aws:iam::*:role/lifebit-cloudos-emr-service-role
               - arn:aws:iam::*:role/lifebit-cloudos-emr-instance-role
               - arn:aws:iam::*:role/aws-service-role/spotfleet.amazonaws.com/AWSServiceRoleForEC2SpotFleet
+              - arn:aws:iam::*:role/lifebit-workspace-ai-lambda-role
           - Effect: Allow
             Action:
               - sts:GetCallerIdentity
