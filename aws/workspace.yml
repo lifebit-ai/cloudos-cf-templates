@@ -241,6 +241,7 @@ Resources:
               - lambda:TagResource
               - lambda:UpdateFunctionConfiguration
               - lambda:UpdateFunctionCode
+              - lambda:InvokeFunction
             Resource: "*"
           - Effect: Allow
             Action:
