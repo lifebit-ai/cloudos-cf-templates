@@ -243,6 +243,11 @@ Resources:
               - lambda:UpdateFunctionCode
               - lambda:InvokeFunction
             Resource: "*"
+          - Sid: AllowLambdaDeleteFunctionForLifebitPlatformFunctions
+            Effect: Allow
+            Action:
+              - lambda:DeleteFunction
+            Resource: "arn:aws:lambda:*:*:function:ai-python-code-runner-*"
           - Effect: Allow
             Action:
               - iam:PassRole
