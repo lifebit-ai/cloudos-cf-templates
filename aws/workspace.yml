@@ -385,22 +385,7 @@ Resources:
               - s3:PutBucketLogging
               - s3:GetBucketLogging
             Resource: "*"
-          - Sid: BedrockModelInvocation
-            Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource:
-              - arn:aws:bedrock:*::foundation-model/amazon*
-              - arn:aws:bedrock:*:*:application-inference-profile/*
-          - Sid: BedrockModelApplicationInference
-            Effect: Allow
-            Action:
-              - bedrock:CreateInferenceProfile
-              - bedrock:DeleteInferenceProfile
-              - bedrock:TagResource
-              - bedrock:GetFoundationModel
-              - bedrock:GetInferenceProfile
-            Resource: "*"
+
           - Sid: DynamoDBTableManagementForWorkspace
             Effect: Allow
             Action:
