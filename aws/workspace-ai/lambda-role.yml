@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to create an IAM role for AWS Lambda running in a custom VPC for workspace-ai
+
+Parameters:
+  LambdaRoleName:
+    Type: String
+    Description: Name of the IAM role for the Lambda function
+    Default: lifebit-workspace-ai-lambda-role
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Lambda Role Configurations
+        Parameters:
+          - LambdaRoleName
+    ParameterLabels:
+      LambdaRoleName:
+        default: Lambda Role Name
+
+Resources:
+  WorkspaceAiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref LambdaRoleName
+      Description: This role is used by AWS Lambda functions for workspace-ai, deployed in a custom VPC.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+
+Outputs:
+  RoleArn:
+    Description: The ARN of the Lambda IAM role
+    Value: !GetAtt [WorkspaceAiLambdaRole, Arn]
+  RoleName:
+    Description: The name of the Lambda IAM role
+    Value: !Ref WorkspaceAiLambdaRole
