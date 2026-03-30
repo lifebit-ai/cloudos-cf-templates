@@ -265,20 +265,23 @@ Resources:
           - Effect: Allow
             Action:
               - s3:AbortMultipartUpload
+              - s3:CreateBucket
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
               - s3:GetBucketCors
               - s3:GetBucketLocation
               - s3:GetBucketPolicy
               - s3:GetBucketPolicyStatus
               - s3:GetBucketTagging
               - s3:GetBucketVersioning
+              - s3:GetLifecycleConfiguration
               - s3:GetObject
               - s3:GetObjectAcl
               - s3:ListBucket
-              - s3:ListMultipartUploadParts
               - s3:ListBucketVersions
-              - s3:GetLifecycleConfiguration
+              - s3:ListMultipartUploadParts
+              - s3:PutBucketCors
               - s3:PutObject
-              - s3:DeleteObject
             Resource: "*"
           - Effect: Allow
             Action:
@@ -289,22 +292,6 @@ Resources:
               - iam:GetRole
               - iam:GetRolePolicy
               - iam:GetInstanceProfile
-            Resource: "*"
-          - Sid: BedrockModelInvocation
-            Effect: Allow
-            Action:
-              - bedrock:InvokeModel
-            Resource:
-              - arn:aws:bedrock:*::foundation-model/amazon*
-              - arn:aws:bedrock:*:*:application-inference-profile/*
-          - Sid: BedrockModelApplicationInference
-            Effect: Allow
-            Action:
-              - bedrock:CreateInferenceProfile
-              - bedrock:DeleteInferenceProfile
-              - bedrock:TagResource
-              - bedrock:GetFoundationModel
-              - bedrock:GetInferenceProfile
             Resource: "*"
           - Sid: DynamoDBTableManagementForWorkspace
             Effect: Allow

@@ -688,7 +688,7 @@ Resources:
               - application-autoscaling:RegisterScalableTarget
               - application-autoscaling:TagResource
               - application-autoscaling:UntagResource
-            Resource: 
+            Resource:
               - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scalable-target/*"
             Condition:
               StringEquals:
@@ -699,7 +699,7 @@ Resources:
               - application-autoscaling:DeregisterScalableTarget
               - application-autoscaling:PutScalingPolicy
               - application-autoscaling:DeleteScalingPolicy
-            Resource: 
+            Resource:
               - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scalable-target/*"
               - !Sub "arn:aws:application-autoscaling:*:${AWS::AccountId}:scaling-policy/*"
             Condition:
@@ -728,6 +728,11 @@ Resources:
             Effect: Allow
             Action:
               - logs:DescribeLogGroups
+            Resource: "*"
+          - Sid: CloudWatchMetricsStatistics
+            Effect: Allow
+            Action:
+              - cloudwatch:GetMetricStatistics
             Resource: "*"
           - Sid: CloudWatchLogsDelete
             Effect: Allow
@@ -778,7 +783,7 @@ Resources:
           Effect: Allow
           Action:
             - ec2:CreateVpcEndpoint
-          Resource: 
+          Resource:
             - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc-endpoint/*"
           Condition:
             StringEquals:
@@ -787,7 +792,7 @@ Resources:
           Effect: Allow
           Action:
             - ec2:CreateVpcEndpoint
-          Resource: 
+          Resource:
             - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc/*"
             - !Sub "arn:aws:ec2:*:${AWS::AccountId}:subnet/*"
             - !Sub "arn:aws:ec2:*:${AWS::AccountId}:security-group/*"
@@ -800,7 +805,7 @@ Resources:
           Action:
             - ec2:DeleteVpcEndpoints
             - ec2:ModifyVpcEndpoint
-          Resource: 
+          Resource:
             - !Sub "arn:aws:ec2:*:${AWS::AccountId}:vpc-endpoint/*"
           Condition:
             StringEquals:
@@ -886,6 +891,17 @@ Resources:
           - rds:ModifyDBParameterGroup
           - rds:DeleteDBParameterGroup
           Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:pg:lifebit-cloudosdb-custom-pg"
+        - Sid: RdsLogs
+          Effect: Allow
+          Action:
+            - rds:DescribeDBLogFiles
+            - rds:DownloadDBLogFilePortion
+          Resource: "*"
+        - Sid: RdsSnapshots
+          Effect: Allow
+          Action:
+            - rds:DescribeDBSnapshots
+          Resource: "*"
         - Sid: KmsWildCardOnly
           Effect: Allow
           Action:
@@ -974,7 +990,7 @@ Resources:
             Condition:
               StringEquals:
                 "aws:ResourceTag/ManagedBy": "Lifebit"
-          - Sid: NlBListenerCreateWithTags  
+          - Sid: NlBListenerCreateWithTags
             Effect: Allow
             Action:
               - elasticloadbalancing:CreateListener
