@@ -71,8 +71,7 @@ Resources:
   LifebitWorkspacePolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName:
-        !Join ["-", [!Ref IamRoleName, "policy"]]
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy"]]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -232,14 +231,13 @@ Resources:
               - ce:*
             Effect: Allow
             Resource: "*"
-      Roles: 
+      Roles:
         - !Ref LifebitWorkspaceRole
 
   LifebitWorkspacePolicy2:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName:
-        !Join ["-", [!Ref IamRoleName, "policy2"]]
+      ManagedPolicyName: !Join ["-", [!Ref IamRoleName, "policy2"]]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -321,7 +319,7 @@ Resources:
             Action:
               - dynamodb:ListTables
             Resource: "*"
-      Roles: 
+      Roles:
         - !Ref LifebitWorkspaceRole
 
   LifebitEMRServiceRole:

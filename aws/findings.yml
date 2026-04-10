@@ -45,7 +45,7 @@ Resources:
   LifebitSystemHealthObservabilityFindingsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: !Sub '${FindingsRoleName}-policy'
+      ManagedPolicyName: !Sub "${FindingsRoleName}-policy"
       Description: Security Hub findings related policies
       Roles:
         - !Ref LifebitSystemHealthObservabilityFindingsRole
@@ -56,7 +56,7 @@ Resources:
             Effect: Allow
             Action:
               - securityhub:GetFindings
-            Resource: '*'
+            Resource: "*"
 
 Outputs:
   RoleArn:
