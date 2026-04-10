@@ -835,6 +835,16 @@ Resources:
           - rds:AddTagsToResource
           - rds:RemoveTagsFromResource
           Resource: "*"
+        - Sid: RdsInstances
+          Effect: Allow
+          Action:
+          - rds:DescribeOrderableDBInstanceOptions
+          Resource: "*"
+        - Sid: GetProducts
+          Effect: Allow
+          Action:
+          - pricing:GetProducts
+          Resource: "*"
         - Sid: RdsWildCardOnly
           Effect: Allow
           Action:
