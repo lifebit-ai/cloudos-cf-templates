@@ -828,18 +828,6 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Sid: RdsTags
-            Effect: Allow
-            Action:
-              - rds:ListTagsForResource
-              - rds:AddTagsToResource
-              - rds:RemoveTagsFromResource
-            Resource: "*"
-          - Sid: RdsInstances
-            Effect: Allow
-            Action:
-              - rds:DescribeOrderableDBInstanceOptions
-            Resource: "*"
           - Sid: GetProducts
             Effect: Allow
             Action:
@@ -850,6 +838,16 @@ Resources:
             Action:
               - rds:DescribeDBInstances
               - rds:DescribeDBClusters
+              - rds:DescribeDBParameterGroups
+              - rds:DescribeDBParameters
+              - rds:DescribeOrderableDBInstanceOptions
+              - rds:DescribeDBLogFiles
+              - rds:DownloadDBLogFilePortion
+              - rds:DescribeDBSnapshots
+              - rds:DescribeDBRecommendations
+              - rds:ListTagsForResource
+              - rds:AddTagsToResource
+              - rds:RemoveTagsFromResource
             Resource: "*"
           - Sid: RdsDbInstanceCreate
             Effect: Allow
@@ -888,12 +886,6 @@ Resources:
               - rds:ModifyDBSubnetGroup
               - rds:DeleteDBSubnetGroup
             Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:subgrp:*"
-          - Sid: RdsParameterGroupDescribe
-            Effect: Allow
-            Action:
-              - rds:DescribeDBParameterGroups
-              - rds:DescribeDBParameters
-            Resource: "*"
           - Sid: RdsParameterGroupManage
             Effect: Allow
             Action:
@@ -901,17 +893,6 @@ Resources:
               - rds:ModifyDBParameterGroup
               - rds:DeleteDBParameterGroup
             Resource: !Sub "arn:aws:rds:*:${AWS::AccountId}:pg:lifebit-cloudosdb-custom-pg"
-          - Sid: RdsLogs
-            Effect: Allow
-            Action:
-              - rds:DescribeDBLogFiles
-              - rds:DownloadDBLogFilePortion
-            Resource: "*"
-          - Sid: RdsSnapshots
-            Effect: Allow
-            Action:
-              - rds:DescribeDBSnapshots
-            Resource: "*"
           - Sid: KmsWildCardOnly
             Effect: Allow
             Action:
