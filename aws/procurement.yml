@@ -1197,6 +1197,41 @@ Resources:
               - s3:AbortMultipartUpload
             Resource: !Sub "arn:aws:s3:::*/*"
 
+  AirlockInProvisioningPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProcurementRoleName}-airlock-in-provisioning-policy"
+      Description: Permissions for Lifebit to create and configure the Airlock In quarantine bucket and enable GuardDuty Malware Protection for S3
+      Roles:
+        - !Ref ProcurementRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: QuarantineBucketProvision
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:CreateBucket
+              - s3:PutBucketPolicy
+              - s3:PutLifecycleConfiguration
+            Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*"
+          - Sid: ManageGuardDutyMalwareProtection
+            Effect: Allow
+            Action:
+              - guardduty:CreateMalwareProtectionPlan
+              - guardduty:GetMalwareProtectionPlan
+              - guardduty:ListMalwareProtectionPlans
+              - guardduty:UpdateMalwareProtectionPlan
+            Resource: "*"
+          # Required to enable GuardDuty: pass the client-provided scan role to the service.
+          - Sid: PassGuardDutyMalwareProtectionRole
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+            Condition:
+              StringEquals:
+                iam:PassedToService: malware-protection-plan.guardduty.amazonaws.com
 Outputs:
   LifebitProcurementRole:
     Description: Created Procurement role.
