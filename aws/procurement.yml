@@ -1215,6 +1215,11 @@ Resources:
               - s3:PutBucketPolicy
               - s3:PutLifecycleConfiguration
             Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*"
+          - Sid: QuarantineObjectTagging
+            Effect: Allow
+            Action:
+              - s3:PutObjectTagging
+            Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*/*"
           - Sid: ManageGuardDutyMalwareProtection
             Effect: Allow
             Action:
