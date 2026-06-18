@@ -385,7 +385,20 @@ Resources:
               - s3:PutBucketLogging
               - s3:GetBucketLogging
             Resource: "*"
-
+          - Sid: AllowIssueAndRevokeCertificateFromCA
+            Effect: Allow
+            Action:
+              - acm-pca:IssueCertificate
+              - acm-pca:GetCertificate
+              - acm-pca:GetCertificateAuthorityCertificate
+              - acm-pca:DescribeCertificateAuthority
+              - acm-pca:RevokeCertificate
+              - acm-pca:ListTags
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/AllowLifebit": "true"
+                "aws:ResourceTag/CAType": "subordinate"
           - Sid: DynamoDBTableManagementForWorkspace
             Effect: Allow
             Action:

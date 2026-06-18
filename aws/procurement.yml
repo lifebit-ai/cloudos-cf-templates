@@ -148,6 +148,18 @@ Resources:
             Resource:
               - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/ecs/*"
               - !Sub "arn:aws:logs:*:${AWS::AccountId}:log-group:/ecs/*:*"
+          - Sid: AllowGetCACertificate
+            Effect: Allow
+            Action:
+              - acm-pca:GetCertificate
+              - acm-pca:GetCertificateAuthorityCertificate
+              - acm-pca:DescribeCertificateAuthority
+              - acm-pca:ListTags
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "aws:ResourceTag/AllowLifebit": "true"
+                "aws:ResourceTag/CAType": "root"
 
   FortigateFirewallInstanceRole:
     Type: AWS::IAM::Role
