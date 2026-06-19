@@ -427,6 +427,18 @@ Resources:
             Action:
               - dynamodb:ListTables
             Resource: "*"
+          - Sid: AllowSecretsManagerCreateAndEdit
+            Effect: Allow
+            Action:
+              - secretsmanager:CreateSecret
+              - secretsmanager:DeleteSecret
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetSecretValue
+              - secretsmanager:PutSecretValue
+              - secretsmanager:TagResource
+              - secretsmanager:UntagResource
+              - secretsmanager:UpdateSecret
+            Resource: "arn:aws:secretsmanager:*:*:secret:lifebit-*"
       Roles:
         - !Ref LifebitWorkspaceRole
 
