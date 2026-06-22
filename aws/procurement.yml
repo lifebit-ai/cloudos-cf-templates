@@ -845,6 +845,12 @@ Resources:
             Action:
               - pricing:GetProducts
             Resource: "*"
+          - Sid: CostExplorer
+            Effect: Allow
+            Action:
+              - ce:GetCostAndUsage
+              - ce:GetTags
+            Resource: "*"
           - Sid: RdsWildCardOnly
             Effect: Allow
             Action:
