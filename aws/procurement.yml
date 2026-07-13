@@ -1231,6 +1231,7 @@ Resources:
               - s3:ListBucket
               - s3:CreateBucket
               - s3:PutBucketPolicy
+              - s3:PutBucketCORS
               - s3:PutLifecycleConfiguration
             Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*"
           - Sid: QuarantineObjectTagging
