@@ -444,6 +444,19 @@ Resources:
               - secretsmanager:UntagResource
               - secretsmanager:UpdateSecret
             Resource: "arn:aws:secretsmanager:*:*:secret:lifebit-*"
+          - Sid: AllowAwsBackup
+            Effect: Allow
+            Action:
+              - backup:ListBackupPlanTemplates
+              - backup:GetBackupPlanFromTemplate
+              - backup:DescribeRegionSettings
+              - backup:UpdateRegionSettings
+              - backup:CreateBackupPlan
+              - backup:CreateBackupSelection
+              - backup:DeleteBackupPlan
+              - backup:DeleteBackupSelection
+              - backup:ListBackupJobs
+            Resource: "*"
       Roles:
         - !Ref LifebitWorkspaceRole
 
