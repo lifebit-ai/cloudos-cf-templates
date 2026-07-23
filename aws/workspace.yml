@@ -265,6 +265,7 @@ Resources:
               - arn:aws:iam::*:role/lifebit-cloudos-emr-instance-role
               - arn:aws:iam::*:role/aws-service-role/spotfleet.amazonaws.com/AWSServiceRoleForEC2SpotFleet
               - arn:aws:iam::*:role/lifebit-workspace-ai-lambda-role
+              - arn:aws:iam::*:role/lifebit-backup-role
           - Effect: Allow
             Action:
               - sts:GetCallerIdentity
@@ -293,6 +294,7 @@ Resources:
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
               - kms:DescribeKey
+              - kms:RetireGrant
             Resource: "*"
           - Action:
               - ce:GetCostAndUsage
@@ -451,6 +453,9 @@ Resources:
               - backup:CreateBackupSelection
               - backup:DeleteBackupPlan
               - backup:DeleteBackupSelection
+              - backup:ListBackupVaults
+              - backup:CreateBackupVault
+              - backup-storage:MountCapsule
             Resource: "*"
       Roles:
         - !Ref LifebitWorkspaceRole
