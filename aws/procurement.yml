@@ -1219,26 +1219,36 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub "${ProcurementRoleName}-airlock-in-provisioning-policy"
-      Description: Permissions for Lifebit to create and configure the Airlock In quarantine bucket and enable GuardDuty Malware Protection for S3
+      Description: Permissions for Lifebit to provision and operate Airlock In infrastructure and DataSync transfers
       Roles:
         - !Ref ProcurementRole
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Sid: QuarantineBucketProvision
+          - Sid: CreateQuarantineBucket
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+            Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-quarantine-*"
+          - Sid: ManageQuarantineBucket
             Effect: Allow
             Action:
               - s3:ListBucket
-              - s3:CreateBucket
               - s3:PutBucketPolicy
               - s3:PutBucketCORS
               - s3:PutLifecycleConfiguration
-            Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*"
+            Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-quarantine-*"
+            Condition:
+              StringEquals:
+                aws:ResourceAccount: !Ref AWS::AccountId
           - Sid: QuarantineObjectTagging
             Effect: Allow
             Action:
               - s3:PutObjectTagging
-            Resource: "arn:aws:s3:::lifebit-airlock-quarantine-*/*"
+            Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-quarantine-*/*"
+            Condition:
+              StringEquals:
+                aws:ResourceAccount: !Ref AWS::AccountId
           - Sid: ManageGuardDutyMalwareProtection
             Effect: Allow
             Action:
@@ -1252,10 +1262,93 @@ Resources:
             Effect: Allow
             Action:
               - iam:PassRole
-            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
             Condition:
               StringEquals:
                 iam:PassedToService: malware-protection-plan.guardduty.amazonaws.com
+          - Sid: CreateAndDiscoverAirlockDataSyncResources
+            Effect: Allow
+            Action:
+              - datasync:CreateLocationS3
+              - datasync:CreateTask
+              - datasync:ListLocations
+              - datasync:ListTaskExecutions
+              - datasync:ListTasks
+            Resource: "*"
+          - Sid: ManageAirlockDataSyncResources
+            Effect: Allow
+            Action:
+              - datasync:CancelTaskExecution
+              - datasync:DeleteLocation
+              - datasync:DeleteTask
+              - datasync:DescribeLocationS3
+              - datasync:DescribeTask
+              - datasync:DescribeTaskExecution
+              - datasync:ListTagsForResource
+              - datasync:StartTaskExecution
+              - datasync:TagResource
+              - datasync:UntagResource
+            Resource: !Sub "arn:${AWS::Partition}:datasync:*:${AWS::AccountId}:*"
+          - Sid: PassAirlockDataSyncRoleToDataSyncOnly
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/LifebitAirlockDataSyncRole"
+            Condition:
+              StringEquals:
+                iam:PassedToService: datasync.amazonaws.com
+          - Sid: AssumeAirlockDataSyncRoleForSourceValidation
+            Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/LifebitAirlockDataSyncRole"
+          - Sid: CreateDataSyncServiceLinkedRoleForEnhancedTasks
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/datasync.amazonaws.com/AWSServiceRoleForDataSync*"
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: datasync.amazonaws.com
+          # The resource prefix is part of the backend provisioning contract
+          # and must not be independently configurable in CloudFormation.
+          - Sid: ProvisionAirlockScanResultQueues
+            Effect: Allow
+            Action:
+              - sqs:CreateQueue
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ListQueueTags
+              - sqs:SetQueueAttributes
+              - sqs:TagQueue
+            Resource: !Sub "arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:lifebit-airlock-scan-result-*"
+          - Sid: ConsumeAirlockGuardDutyScanResults
+            Effect: Allow
+            Action:
+              - sqs:ChangeMessageVisibility
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ReceiveMessage
+            Resource: !Sub "arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:lifebit-airlock-scan-result-*"
+          - Sid: ProvisionAirlockScanResultRule
+            Effect: Allow
+            Action:
+              - events:DescribeRule
+              - events:ListTagsForResource
+              - events:ListTargetsByRule
+              - events:PutRule
+              - events:TagResource
+            Resource: !Sub "arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/lifebit-airlock-scan-result-*"
+          - Sid: SetAirlockScanResultQueueTarget
+            Effect: Allow
+            Action:
+              - events:PutTargets
+            Resource: !Sub "arn:${AWS::Partition}:events:*:${AWS::AccountId}:rule/lifebit-airlock-scan-result-*"
+            Condition:
+              ArnLike:
+                events:TargetArn: !Sub "arn:${AWS::Partition}:sqs:*:${AWS::AccountId}:lifebit-airlock-scan-result-*"
+
 Outputs:
   LifebitProcurementRole:
     Description: Created Procurement role.

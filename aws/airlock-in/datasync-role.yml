@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to provision the AWS DataSync IAM role used by Airlock In in the procurement account
+
+Parameters:
+  ProcurementRoleName:
+    Type: String
+    Description: Name of the procurement IAM role allowed to assume the DataSync role for source validation
+    Default: lifebit-network-manager-role
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Airlock In DataSync Configurations
+        Parameters:
+          - ProcurementRoleName
+    ParameterLabels:
+      ProcurementRoleName:
+        default: Procurement Role Name
+
+Resources:
+  AirlockDataSyncRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # Generated customer bucket policies reference this exact role name.
+      RoleName: LifebitAirlockDataSyncRole
+      Description: Assumed by AWS DataSync to copy external S3 data through Airlock In quarantine into workspace storage.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowDataSyncService
+            Effect: Allow
+            Principal:
+              Service: datasync.amazonaws.com
+            Action:
+              - sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:datasync:*:${AWS::AccountId}:*"
+          - Sid: AllowProcurementSourceValidation
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProcurementRoleName}"
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: airlock-external-source-read
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: ReadAndListExternalSourceBuckets
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !Sub "arn:${AWS::Partition}:s3:::*"
+                Condition:
+                  StringNotEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+              - Sid: ReadExternalSourceObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::*/*"
+                Condition:
+                  StringNotEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+        - PolicyName: airlock-quarantine-transfer
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AccessQuarantineBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-quarantine-*"
+                # S3 bucket ARNs do not carry an account ID, so the name prefix
+                # alone is not an account boundary.
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+              - Sid: ReadWriteQuarantineObjects
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:ListMultipartUploadParts
+                  - s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-quarantine-*/*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+        - PolicyName: airlock-workspace-destination-transfer
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AccessWorkspaceAirlockInBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-in-*"
+              - Sid: WriteWorkspaceAirlockInObjects
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:ListMultipartUploadParts
+                  - s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::lifebit-airlock-in-*/*"
+
+Outputs:
+  AirlockDataSyncRoleArn:
+    Description: ARN of the IAM role assumed by AWS DataSync for Airlock In transfers
+    Value: !GetAtt AirlockDataSyncRole.Arn
