@@ -3,7 +3,7 @@ Description: CloudFormation template to create IAM roles required to run Trusted
 
 Parameters:
   LifebitTrustedEntityArn:
-    Type: String
+    Type: List<String>
     Description: ARN of the Lifebit account root trusted to assume the hub role
     Default: arn:aws:iam::209235234270:root
   TrustedAppRoleName:
@@ -41,6 +41,7 @@ Resources:
               AWS: !Ref LifebitTrustedEntityArn
             Action:
               - sts:AssumeRole
+              - sts:TagSession
 
   TrustedAppHubTaskExecutionRole:
     Type: AWS::IAM::Role
