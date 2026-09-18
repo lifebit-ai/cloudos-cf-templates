@@ -210,6 +210,7 @@ Resources:
               - ec2:GetTransitGatewayRouteTableAssociations
               - ec2:DescribeTransitGatewayAttachments
               - ec2:DescribeTransitGateways
+              - ec2:DescribeTags
             Resource: "*"
 
   AcmPolicy:
