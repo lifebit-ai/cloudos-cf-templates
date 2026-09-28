@@ -235,6 +235,27 @@ Resources:
               - acm:ListTagsForCertificate
             Resource: "*"
 
+  EcrPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${TrustedAppRoleName}-ecr-policy"
+      Description: Read-only ECR access to verify that provider private ECR images are pullable before dispatching stack creation
+      Roles:
+        - !Ref TrustedAppHubRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EcrAuthorizationToken
+            Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource: "*"
+          - Sid: EcrImageManifestRead
+            Effect: Allow
+            Action:
+              - ecr:BatchGetImage
+            Resource: "arn:aws:ecr:*:*:repository/*"
+
   CloudWatchLogsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
