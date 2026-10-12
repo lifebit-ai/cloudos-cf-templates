@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to create the customer-owned AWS Bedrock access role used by Lifebit AI Agent Studio
+
+Parameters:
+  LifebitPlatformIamTrustedEntityArns:
+    Type: List<String>
+    Description: Lifebit Platform Iam Trusted Entities Arns (IAM User or Roles)
+    Default: arn:aws:iam::209235234270:root
+  OrgId:
+    Type: String
+    Description: Optional Lifebit organisation ID from Agentic Studio. When provided, it is used as the sts:ExternalId condition in the trust policy.
+    Default: ""
+    MaxLength: 24
+    AllowedPattern: "^$|^[a-fA-F0-9]{24}$"
+    ConstraintDescription: Must be empty or a valid 24-character organisation id.
+  ApplicationInferenceProfileArns:
+    Type: CommaDelimitedList
+    Description: Required comma-delimited list of Bedrock application inference profile ARNs this role can invoke.
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:bedrock:[a-z0-9-]+:[0-9]{12}:application-inference-profile/.+$"
+    ConstraintDescription: Each value must be a Bedrock application inference profile ARN.
+  BedrockProviderRoleName:
+    Type: String
+    Description: Name of the IAM role to create for Lifebit AI Agent Studio Bedrock access.
+    Default: lifebit-ai-agent-studio-bedrock-provider-role
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Lifebit Trust Configuration
+        Parameters:
+          - LifebitPlatformIamTrustedEntityArns
+          - OrgId
+      - Label:
+          default: Bedrock Invocation Configuration
+        Parameters:
+          - ApplicationInferenceProfileArns
+          - BedrockProviderRoleName
+    ParameterLabels:
+      LifebitPlatformIamTrustedEntityArns:
+        default: Iam Trusted Entities Arns
+      OrgId:
+        default: Lifebit Organisation ID (optional)
+      ApplicationInferenceProfileArns:
+        default: Bedrock Application Inference Profile ARNs (required)
+      BedrockProviderRoleName:
+        default: Bedrock Provider Role Name
+
+Conditions:
+  HasOrgId:
+    Fn::Not:
+      - Fn::Equals:
+          - !Ref OrgId
+          - ""
+
+Resources:
+  BedrockProviderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref BedrockProviderRoleName
+      Description: Assumed by Lifebit ai-service to invoke the customer-approved Bedrock models for AI Agent Studio.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref LifebitPlatformIamTrustedEntityArns
+            Action:
+              - sts:AssumeRole
+            Condition: !If
+              - HasOrgId
+              - StringEquals:
+                  sts:ExternalId: !Ref OrgId
+              - !Ref AWS::NoValue
+
+  BedrockProviderPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${BedrockProviderRoleName}-policy"
+      Description: Minimal Bedrock permissions for Lifebit AI Agent Studio to invoke customer-registered models.
+      Roles:
+        - !Ref BedrockProviderRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: InvokeRegisteredBedrockModels
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: !Ref ApplicationInferenceProfileArns
+          # Bedrock also authorises the foundation model behind a profile; the condition blocks direct invocation.
+          - Sid: InvokeFoundationModelsViaRegisteredProfiles
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+            Condition:
+              ArnEquals:
+                bedrock:InferenceProfileArn: !Ref ApplicationInferenceProfileArns
+          - Sid: ReadOnlyBedrockDiscovery
+            Effect: Allow
+            Action:
+              - bedrock:ListFoundationModels
+              - bedrock:ListInferenceProfiles
+              - bedrock:GetInferenceProfile
+            Resource: "*"
+
+Outputs:
+  BedrockProviderRoleArn:
+    Description: ARN of the IAM role to register in Agentic Studio as the AWS Bedrock provider role.
+    Value: !GetAtt BedrockProviderRole.Arn
+  ExternalId:
+    Condition: HasOrgId
+    Description: ExternalId configured on the role trust policy. This matches the Lifebit organisation ID when provided.
+    Value: !Ref OrgId
